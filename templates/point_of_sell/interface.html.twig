@@ -1,0 +1,396 @@
+{# templates/point_of_sell/interface.html.twig #}
+{% extends 'base.html.twig' %}
+
+{% block title %}Easy Stock - Point de Vente{% endblock %}
+
+{% block page_title %}Point de Vente{% endblock %}
+{% block page_subtitle %}Interface de caisse{% endblock %}
+
+{% block stylesheets %}
+{{ parent() }}
+<style>
+    /* Styles spécifiques au point de vente */
+    /* (Inclure votre CSS original ici) */
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="app-container" id="pos-app">
+    <!-- Header spécifique POS -->
+    <header class="app-header">
+        <div class="header-content">
+            <div>
+                <i class="fas fa-cash-register me-2"></i>
+                <span class="fw-bold">Caisse #{{ user.shop_id ?? '1' }}</span>
+                <span class="badge bg-success ms-2" id="cart-status">
+                    <i class="fas fa-circle"></i> Panier actif
+                </span>
+            </div>
+            
+            <div class="d-flex align-items-center gap-3">
+                <div class="text-end">
+                    <div class="fw-bold">{{ user.full_name ?? 'Caissier' }}</div>
+                    <small class="text-muted">{{ user.role|default('Caissier') }}</small>
+                </div>
+                <button class="btn btn-outline-light btn-sm" id="toggle-help">
+                    <i class="fas fa-question-circle"></i> Aide
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Votre interface POS originale -->
+    <div class="main-content">
+        <!-- Colonne de gauche - Galerie -->
+        <aside class="left-column">
+            <!-- ... Votre code galerie ... -->
+        </aside>
+
+        <!-- Colonne centrale -->
+        <main class="center-column">
+            <!-- ... Votre code recherche et résultats ... -->
+        </main>
+
+        <!-- Colonne de droite - Panier -->
+        <aside class="right-column">
+            <!-- ... Votre code panier ... -->
+        </aside>
+    </div>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+        <!-- ... Votre code footer ... -->
+    </footer>
+</div>
+{% endblock %}
+
+{% block javascripts %}
+{{ parent() }}
+<script>
+// JavaScript pour gérer les interactions POS
+class PointOfSale {
+    constructor() {
+        this.cartId = null;
+        this.customerId = null;
+        this.init();
+    }
+    
+    init() {
+        // Vérifier s'il y a un panier actif
+        this.checkActiveCart();
+        
+        // Écouter les événements
+        this.setupEventListeners();
+        
+        // Focus sur le champ de scan
+        document.getElementById('barcode-input')?.focus();
+    }
+    
+    setupEventListeners() {
+        // Scan d'article
+        document.getElementById('scan-btn')?.addEventListener('click', () => this.scanItem());
+        document.getElementById('barcode-input')?.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') this.scanItem();
+        });
+        
+        // Recherche client
+        document.getElementById('search-client-btn')?.addEventListener('click', () => this.findCustomer());
+        document.getElementById('client-search')?.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') this.findCustomer();
+        });
+        
+        // Boutons panier
+        document.getElementById('finalize-btn')?.addEventListener('click', () => this.finalizeSale());
+        document.getElementById('suspend-btn')?.addEventListener('click', () => this.suspendCart());
+        document.getElementById('cancel-btn')?.addEventListener('click', () => this.cancelCart());
+    }
+    
+    async checkActiveCart() {
+        try {
+            const response = await fetch('/api/pos/cart/items');
+            const data = await response.json();
+            
+            if (data.success && data.data) {
+                this.cartId = data.data.id;
+                this.updateCartDisplay(data.data);
+            }
+        } catch (error) {
+            console.error('Erreur vérification panier:', error);
+        }
+    }
+    
+    async scanItem() {
+        const barcodeInput = document.getElementById('barcode-input');
+        const barcode = barcodeInput?.value.trim();
+        
+        if (!barcode) {
+            alert('Veuillez entrer un code barre');
+            return;
+        }
+        
+        const scanData = {
+            barcode: barcode,
+            customer_id: this.customerId,
+            quantity: 1
+        };
+        
+        try {
+            const response = await fetch('/api/pos/scan', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(scanData)
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                this.cartId = data.cart_id;
+                this.updateCartDisplay(data);
+                barcodeInput.value = '';
+                barcodeInput.focus();
+            } else {
+                alert(data.message || 'Erreur lors du scan');
+            }
+        } catch (error) {
+            console.error('Erreur scan:', error);
+            alert('Erreur de connexion au serveur');
+        }
+    }
+    
+    async findCustomer() {
+        const searchInput = document.getElementById('client-search');
+        const identifier = searchInput?.value.trim();
+        
+        if (!identifier) {
+            alert('Veuillez entrer un identifiant client');
+            return;
+        }
+        
+        try {
+            const response = await fetch('/api/pos/customer/find', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ identifierValue: identifier })
+            });
+            
+            const data = await response.json();
+            
+            if (data.customer_id) {
+                this.customerId = data.customer_id;
+                this.displayCustomerInfo(data);
+            } else {
+                alert('Client non trouvé');
+            }
+        } catch (error) {
+            console.error('Erreur recherche client:', error);
+        }
+    }
+    
+    async updateItemQuantity(itemId, delta) {
+        try {
+            const response = await fetch('/api/pos/cart/item/update', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ item_id: itemId, delta: delta })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                this.checkActiveCart();
+            } else {
+                alert(data.message);
+            }
+        } catch (error) {
+            console.error('Erreur mise à jour quantité:', error);
+        }
+    }
+    
+    async removeItem(itemId) {
+        if (!confirm('Supprimer cet article du panier?')) return;
+        
+        try {
+            const response = await fetch('/api/pos/cart/item/remove', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ item_id: itemId })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                this.checkActiveCart();
+            }
+        } catch (error) {
+            console.error('Erreur suppression article:', error);
+        }
+    }
+    
+    async suspendCart() {
+        if (!confirm('Suspendre ce panier?')) return;
+        
+        try {
+            const response = await fetch('/api/pos/cart/suspend', {
+                method: 'POST'
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                alert('Panier suspendu avec succès');
+                this.cartId = null;
+                this.updateCartDisplay(null);
+            }
+        } catch (error) {
+            console.error('Erreur suspension:', error);
+        }
+    }
+    
+    async cancelCart() {
+        if (!confirm('Annuler définitivement ce panier?')) return;
+        
+        try {
+            const response = await fetch('/api/pos/cart/cancel', {
+                method: 'POST'
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                alert('Panier annulé');
+                this.cartId = null;
+                this.updateCartDisplay(null);
+            }
+        } catch (error) {
+            console.error('Erreur annulation:', error);
+        }
+    }
+    
+    async finalizeSale() {
+        // Demander les informations de paiement
+        const amount = parseFloat(prompt('Montant reçu:', '0'));
+        
+        if (isNaN(amount) || amount <= 0) {
+            alert('Montant invalide');
+            return;
+        }
+        
+        const paymentData = {
+            payments: [{
+                method: 'cash',
+                amount: amount,
+                reference: 'till-' + (this.user?.shop_id || '1')
+            }],
+            discount: 0,
+            loyalty_points_used: 0
+        };
+        
+        try {
+            const response = await fetch('/api/pos/cart/finalize', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(paymentData)
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                alert('Vente finalisée! Numéro de vente: ' + data.data.sale_id);
+                this.cartId = null;
+                this.updateCartDisplay(null);
+            }
+        } catch (error) {
+            console.error('Erreur finalisation:', error);
+        }
+    }
+    
+    updateCartDisplay(cartData) {
+        const container = document.getElementById('cart-items-container');
+        const countElement = document.getElementById('cart-item-count');
+        
+        if (!cartData || !cartData.items || cartData.items.length === 0) {
+            container.innerHTML = `
+                <div class="text-center py-4 text-muted">
+                    <i class="fas fa-shopping-cart fa-2x mb-2"></i>
+                    <p style="font-size: 0.9rem;">Panier vide</p>
+                </div>
+            `;
+            countElement.textContent = '0';
+            this.updateTotals(0, 0, 0);
+            return;
+        }
+        
+        // Calculer les totaux
+        let subtotal = 0;
+        let discount = 0;
+        
+        const itemsHtml = cartData.items.map(item => {
+            const itemTotal = item.quantity * item.unit_price;
+            subtotal += itemTotal;
+            
+            return `
+                <div class="cart-item" data-item-id="${item.id}">
+                    <div class="cart-item-info">
+                        <div class="fw-bold" style="font-size: 0.9rem;">${item.product_name || 'Produit'}</div>
+                        <small class="text-muted">${item.unit_price} € × ${item.quantity}</small>
+                        <div class="text-success fw-bold" style="font-size: 0.85rem;">${itemTotal.toFixed(2)} €</div>
+                    </div>
+                    <div class="cart-item-actions">
+                        <div class="quantity-control">
+                            <button class="btn btn-sm btn-outline-secondary" onclick="pos.updateItemQuantity(${item.id}, -1)">
+                                <i class="fas fa-minus"></i>
+                            </button>
+                            <input type="text" class="quantity-input form-control form-control-sm" 
+                                   value="${item.quantity}" readonly>
+                            <button class="btn btn-sm btn-outline-secondary" onclick="pos.updateItemQuantity(${item.id}, 1)">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                        </div>
+                        <button class="btn btn-sm btn-outline-danger" onclick="pos.removeItem(${item.id})">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+        container.innerHTML = itemsHtml;
+        countElement.textContent = cartData.items.length.toString();
+        
+        // Mettre à jour les totaux
+        const tax = subtotal * 0.2; // 20% TVA
+        const grandTotal = subtotal + tax - discount;
+        
+        this.updateTotals(subtotal, discount, tax, grandTotal);
+    }
+    
+    updateTotals(subtotal, discount, tax, grandTotal = 0) {
+        document.getElementById('subtotal').textContent = subtotal.toFixed(2) + ' €';
+        document.getElementById('discount').textContent = discount.toFixed(2) + ' €';
+        document.getElementById('tax').textContent = tax.toFixed(2) + ' €';
+        document.getElementById('grand-total').textContent = grandTotal.toFixed(2) + ' €';
+    }
+    
+    displayCustomerInfo(customerData) {
+        const container = document.getElementById('client-info');
+        
+        container.innerHTML = `
+            <div class="alert alert-success">
+                <h6 class="fw-bold">${customerData.full_name}</h6>
+                <p class="mb-1"><i class="fas fa-id-card"></i> ID: ${customerData.customer_id}</p>
+                <p class="mb-1"><i class="fas fa-phone"></i> ${customerData.phone || 'Non renseigné'}</p>
+                <p class="mb-1"><i class="fas fa-envelope"></i> ${customerData.email || 'Non renseigné'}</p>
+                <p class="mb-0"><i class="fas fa-star"></i> Points fidélité: ${customerData.loyalty_points || 0}</p>
+            </div>
+        `;
+    }
+}
+
+// Initialiser l'application POS
+let pos;
+document.addEventListener('DOMContentLoaded', () => {
+    pos = new PointOfSale();
+    window.pos = pos; // Exposer pour les appels depuis HTML
+});
+</script>
+{% endblock %}
