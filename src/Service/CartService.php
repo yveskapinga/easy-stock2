@@ -15,7 +15,9 @@ class CartService extends ApiService
         HttpClientInterface $httpClient,
         RequestStack $requestStack,
     ) {
-        $this->apiBaseUrl = $_ENV['API_BASE_URL'] ?? 'http://localhost:3000';
+        $this->apiBaseUrl = $_ENV['API_BASE_URL'] ?? 'http://127.0.0.1:3000';
+
+        // $this->apiBaseUrl = $_ENV['API_BASE_URL'] ?? 'http://localhost:3000';
         parent::__construct($httpClient, $requestStack, $this->apiBaseUrl);
         $this->currentCartId = $requestStack->getSession()->get('current_cart_id');
     }

@@ -9,6 +9,7 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\Routing\Annotation\Route;
 use App\Service\CartService;
+use App\Service\ApiService;
 
 class PointOfSellController extends AbstractController
 {
@@ -18,6 +19,26 @@ class PointOfSellController extends AbstractController
     {
         $this->cartService = $cartService;
     }
+
+//     #[Route('/test-cart', name: 'test_cart')]
+// public function testCart(): JsonResponse
+// {
+//     $result = $this->cartService->scanItem('8410635024050');
+
+//     return new JsonResponse($result);
+// }
+
+    // #[Route('/test-api', name: 'test_api')]
+    // public function test(CartService $api): JsonResponse
+    // {
+    //     $result = $api->getResponse();
+
+    //     return new JsonResponse([
+    //         'symfony' => 'OK',
+    //         'express_response' => $result
+    //     ]);
+    // }
+
     
     /**
      * Page principale du point de vente
